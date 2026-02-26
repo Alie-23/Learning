@@ -1,9 +1,12 @@
 #### Canadian Cancer Application Using HMD Intermediate Age-specific Death Rates 1950-2022 ####
-
 #libraries
 library(readr)
 library(tidyverse)
 library(ggplot2)
+library(shiny)
+library(bslib)
+library(shinyWidgets)
+library(plotly)
 
 can_int_dat_raw <- read_csv("CAN_m_interm_orig.csv",
 col_types = cols(
@@ -79,3 +82,180 @@ can_int_dat <- can_int_dat %>%
     )
   )
 
+# Creating death proportion (px)
+can_int_tots <- can_int_dat %>%
+  group_by(year, age, sex) %>%
+  summarise(total_deaths = sum(deaths_numeric, na.rm = TRUE))
+
+can_int_dat_final <- can_int_dat %>%
+  left_join(can_int_tots, by = c("year", "age", "sex")) %>%
+  mutate(px = deaths_numeric / total_deaths) 
+
+#Labeling causes of death
+causes_int <- c(
+  "I007" =  "Lip, oral cavity and pharynx",
+  "I008" =  "Esophagus",
+  "I009" =  "Stomach",
+  "I010" =  "Colon, rectum and anus ",
+  "I011" =  "Pancreas",
+  "I012" =  "Digestive System",
+  "I013" =  "Larynx, trachea, bronchus and lung ",
+  "I014" =  "Skin",
+  "I015" =  "Breast",
+  "I016" =  "Uterus",
+  "I017" =  "Ovary",
+  "I018" =  "Prostate",
+  "I019" =  "Genital organs",
+  "I020" =  "Bladder",
+  "I021" =  "Kidney and urinary organs",
+  "I022" =  "Leukemia",
+  "I023" =  "Other/unknown/benign neoplasms"
+  
+)
+can_int_dat_final <- can_int_dat_final %>%
+  mutate(
+    causes_int_label = factor(causes_int[cause], levels = unname(causes_int))
+  )
+
+
+# Shiny App
+
+ui <- fluidPage(
+  titlePanel("Cancer Mortality in Canada: An Analysis of Age, Sex, and Proportion of Death"),
+    sidebarPanel(
+    selectInput("cause", "Select cancer type:",
+                choices = setNames(names(causes_int), causes_int)),
+    selectInput("sex", "Select sex: ",
+                choices = c("Male" = 1, "Female" = 2, "Both" = 3))
+    
+  ),
+  mainPanel(plotlyOutput("heatmapPlot", height = "800px")
+ ))
+
+
+server <- function(input, output) {
+  output$heatmapPlot <- renderPlotly({
+    can_int_sm  <- can_int_dat_final %>% 
+     filter(cause == input$cause,
+            sex == input$sex 
+    )   
+    if (nrow(can_int_sm) == 0) {
+      return(plotly_empty(type = "heatmap"))
+    }
+    
+    plot_ly(
+      data = can_int_sm,
+      x = ~year,
+      y = ~age_start,
+      z = ~px,
+      type = "heatmap",
+      colors = "Blues",
+      hoverinfo = "text",
+      text = ~paste("Year:", year,
+                    "<br>Age:", age_start,
+                    "<br>Sex:", sex,
+                    "<br>Proportion of Deaths:", sprintf("%.3f", px)),
+      colorbar = list(
+        title = list(text = "Proportion of deaths (px)", side = "right")
+      )
+    ) %>%
+      layout(
+        xaxis = list(title = "Year", tickvals = seq(1950, 2022, 5)),
+        yaxis = list(title = "Age", tickvals = seq(0, 99, 10))
+      )
+    
+  }
+  
+  )
+}
+shinyApp(ui = ui, server = server)
+
+
+ui <-
+  fluidPage(
+    titlePanel("Cancer Mortality in Canada: An Analysis of Age, Sex, and Proportion of Death"),
+    fluidRow(
+      #Left side
+      column(
+        width = 6,
+        selectInput(
+          "cause_left", "Select cancer type:",
+          choices = setNames(names(causes_int), causes_int)
+        ),
+        selectInput(
+          "sex_left", "Select sex:",
+          choices = c("Male" = 1, "Female" = 2, "Both" = 3)
+        ),
+        plotlyOutput("heatmap1", height = "600px")
+        
+      ),
+      #Right side
+      column(
+          width = 6,
+          selectInput(
+            "cause_right", "Select cancer type:",
+            choices = setNames(names(causes_int), causes_int)
+          ),
+          selectInput(
+            "sex_right", "Select sex:",
+            choices = c("Male" = 1, "Female" = 2, "Both" = 3)
+          ),
+          plotlyOutput("heatmap2", height = "600px")
+    )
+  )
+)
+server <- function (input, output) {
+  #left side
+  output$heatmap1 <- renderPlotly({
+   can_int_sm_left <- can_int_dat_final %>% 
+     filter(
+       cause== input$cause_left,
+       sex== input$sex_left)
+   plot_ly(
+     data = can_int_sm_left, 
+     x = ~year, 
+     y = ~age_start, 
+     z = ~px, 
+     customdata = ~sex,
+     type = "heatmap",
+     colors = "Blues",
+     hovertemplate = paste(
+       "Year: %{x}<br>", 
+       "Age: %{y}<br>",
+       "Sex: %{customdata}<br>",
+       "Px: %{z:.1%}<extra></extra>")
+   ) %>% 
+     layout(
+       xaxis = list(title = "Year", tickvals = seq(1950, 2022, 10)),
+       yaxis = list(title = "Age", tickvals = seq(0, 99, 10))
+     )
+  })
+  
+  #right side
+  output$heatmap2 <- renderPlotly({
+    can_int_sm_right <- can_int_dat_final %>% 
+      filter(
+        cause== input$cause_right,
+        sex== input$sex_right)
+    plot_ly(
+      data = can_int_sm_right, 
+      x = ~year, 
+      y = ~age_start, 
+      z = ~px, 
+      customdata = ~sex,
+      type = "heatmap",
+      colors = "Blues",
+      hovertemplate = paste(
+        "Year: %{x}<br>", 
+        "Age: %{y}<br>",
+        "Sex: %{customdata}<br>",
+        "Px: %{z:.1%}<extra></extra>")
+    ) %>% 
+      layout(
+        xaxis = list(title = "Year", tickvals = seq(1950, 2022, 10)),
+        yaxis = list(title = "Age", tickvals = seq(0, 99, 10))
+      )
+  })
+  
+}
+shinyApp(ui = ui, server = server)
