@@ -31,9 +31,8 @@ can_int_dat <- can_int_dat_raw %>%
     names_to = "age",
     values_to = "deaths"
   ) %>% 
-  filter(!age %in% c("m85p", "m90p", "m95p", "m100p"))
+  filter(!age %in% c("m85", "m90", "m95", "m90p", "m95p", "m100p"))
 
-#Removed ages above 85 because this data ends up not being available in the 2000's, so code below shows that d85p includes ages 85-100
 can_int_dat <- can_int_dat %>% 
   mutate(
     age_group = case_when(
@@ -55,18 +54,18 @@ can_int_dat <- can_int_dat %>%
       age == "m70" ~ "70-74",
       age == "m75" ~ "75-79",
       age == "m80" ~ "80-84",
-      age == "m85" ~ "85-89",
-      age == "m90" ~ "90-94",
-      age == "m95" ~ "95-99",
+      age == "m85p" ~ "85-100",
       TRUE ~ NA_character_
     ),
     age_start = case_when(
       age == "m0" ~ 0,
+      age == "m85p" ~ 85,
       TRUE ~ as.numeric(stringr::str_extract(age, "\\d+"))
     ),
     age_width = case_when(
-      age == "d0" ~ 1,
-      age == "d1" ~ 4,
+      age == "m0" ~ 1,
+      age == "m1" ~ 4,
+      age == "m85p" ~ 15,
       TRUE ~ 5
     ),
     deaths_numeric = as.numeric(deaths)
@@ -118,59 +117,7 @@ can_int_dat_final <- can_int_dat_final %>%
   )
 
 
-# Shiny App
-
-ui <- fluidPage(
-  titlePanel("Cancer Mortality in Canada: An Analysis of Age, Sex, and Proportion of Death"),
-    sidebarPanel(
-    selectInput("cause", "Select cancer type:",
-                choices = setNames(names(causes_int), causes_int)),
-    selectInput("sex", "Select sex: ",
-                choices = c("Male" = 1, "Female" = 2, "Both" = 3))
-    
-  ),
-  mainPanel(plotlyOutput("heatmapPlot", height = "800px")
- ))
-
-
-server <- function(input, output) {
-  output$heatmapPlot <- renderPlotly({
-    can_int_sm  <- can_int_dat_final %>% 
-     filter(cause == input$cause,
-            sex == input$sex 
-    )   
-    if (nrow(can_int_sm) == 0) {
-      return(plotly_empty(type = "heatmap"))
-    }
-    
-    plot_ly(
-      data = can_int_sm,
-      x = ~year,
-      y = ~age_start,
-      z = ~px,
-      type = "heatmap",
-      colors = "Blues",
-      hoverinfo = "text",
-      text = ~paste("Year:", year,
-                    "<br>Age:", age_start,
-                    "<br>Sex:", sex,
-                    "<br>Proportion of Deaths:", sprintf("%.3f", px)),
-      colorbar = list(
-        title = list(text = "Proportion of deaths (px)", side = "right")
-      )
-    ) %>%
-      layout(
-        xaxis = list(title = "Year", tickvals = seq(1950, 2022, 5)),
-        yaxis = list(title = "Age", tickvals = seq(0, 99, 10))
-      )
-    
-  }
-  
-  )
-}
-shinyApp(ui = ui, server = server)
-
-
+#### Shiny App Code ####
 ui <-
   fluidPage(
     titlePanel("Cancer Mortality in Canada: An Analysis of Age, Sex, and Proportion of Death"),
@@ -180,11 +127,13 @@ ui <-
         width = 6,
         selectInput(
           "cause_left", "Select cancer type:",
-          choices = setNames(names(causes_int), causes_int)
+          choices = setNames(names(causes_int), causes_int),
+          selected = "I015"
         ),
         selectInput(
           "sex_left", "Select sex:",
-          choices = c("Male" = 1, "Female" = 2, "Both" = 3)
+          choices = c("Male" = 1, "Female" = 2, "Both" = 3),
+          selected = 2
         ),
         plotlyOutput("heatmap1", height = "600px")
         
@@ -194,11 +143,13 @@ ui <-
           width = 6,
           selectInput(
             "cause_right", "Select cancer type:",
-            choices = setNames(names(causes_int), causes_int)
+            choices = setNames(names(causes_int), causes_int),
+            selected = "I018"
           ),
           selectInput(
             "sex_right", "Select sex:",
-            choices = c("Male" = 1, "Female" = 2, "Both" = 3)
+            choices = c("Male" = 1, "Female" = 2, "Both" = 3),
+            selected = 1
           ),
           plotlyOutput("heatmap2", height = "600px")
     )
@@ -218,12 +169,12 @@ server <- function (input, output) {
      z = ~px, 
      customdata = ~sex,
      type = "heatmap",
-     colors = "Blues",
+     colors = rev(viridisLite::viridis(100)),
      hovertemplate = paste(
        "Year: %{x}<br>", 
        "Age: %{y}<br>",
        "Sex: %{customdata}<br>",
-       "Px: %{z:.1%}<extra></extra>")
+       "Px: %{z:.3f}<extra></extra>")
    ) %>% 
      layout(
        xaxis = list(title = "Year", tickvals = seq(1950, 2022, 10)),
@@ -244,12 +195,12 @@ server <- function (input, output) {
       z = ~px, 
       customdata = ~sex,
       type = "heatmap",
-      colors = "Blues",
+      colors = rev(viridisLite::viridis(100)),
       hovertemplate = paste(
         "Year: %{x}<br>", 
         "Age: %{y}<br>",
         "Sex: %{customdata}<br>",
-        "Px: %{z:.1%}<extra></extra>")
+        "Px: %{z:.3f}<extra></extra>")
     ) %>% 
       layout(
         xaxis = list(title = "Year", tickvals = seq(1950, 2022, 10)),
